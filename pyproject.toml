@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vsl-langchain"
+version = "0.1.0"
+description = "LangChain adapter for VSL (VERBA Specification Language) governance primitives -- implements vsl-core's VSLAdapter conformance contract via create_agent's AgentMiddleware.wrap_tool_call hook."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    # vsl-core (dist name super-semantics-vsl) isn't published on PyPI yet --
+    # a plain "super-semantics-vsl" requirement here would fail to resolve
+    # on a clean install. Switch this to a version pin once it's published;
+    # note PyPI itself rejects direct-URL deps at upload time, so this line
+    # also has to change before *this* package can be published there.
+    "super-semantics-vsl @ git+https://github.com/supersemantics/VSL-Core.git",
+    # AgentMiddleware.wrap_tool_call ("skip calling it to short-circuit")
+    # is the confirmed F1 pre-commitment interception point this adapter
+    # compiles gates onto -- requires the current, non-deprecated
+    # langchain.agents.create_agent API, not the deprecated AgentExecutor.
+    "langchain>=1.0",
+]
+keywords = ["governance", "ai-safety", "guardrails", "langchain", "vsl", "verba"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "pytest-asyncio>=0.23"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
