@@ -62,6 +62,8 @@ A `PreNode`'s `Fallback` (`on_failure`, `delta_factor`, `max_retries`, `on_max_r
 
 Nothing in `awrap_tool_call` calls `VerbaLedger.write*` — a gate denial becomes an error `ToolMessage`, and that's it. If you want an audit trail of gate decisions, your own code (e.g. wrapping `VSLToolMiddleware` construction, or a separate middleware) has to call `ledger.write_monitor`/`write_verification`/`write` explicitly. An agent with no ledger calls anywhere produces real, working gating and zero audit trail — this package won't warn you, because from its point of view every gate did exactly what it was compiled to do.
 
+For persisting those writes to a durable, hosted ledger rather than a local file, `VerbaLedger` accepts any `LedgerStore` -- see [`vsl-core-ledger-client`](https://github.com/supersemantics/VSL-Core-ledger-client).
+
 ## The F1/F2 assurance distinction — same caveat as `vsl-core` and `vsl-langgraph`
 
 Every `PreNode`/`Invariant` here still requires an `AssuranceBasis`, and it's still **self-declared, not independently verified** — nothing in this package checks that a stated `F2Modification.FULL` actually matches what a `monitor`/`rule` does. See `vsl-core`'s README ("The F1/F2 assurance distinction") for the full explanation. `vsl-langchain` does not yet carry the hosted-API-detection heuristic `vsl-langgraph`'s `LangGraphAdapter` has — that's a known gap, not implemented in this initial version.
