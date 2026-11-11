@@ -62,7 +62,7 @@ A `PreNode`'s `Fallback` (`on_failure`, `delta_factor`, `max_retries`, `on_max_r
 
 Nothing in `awrap_tool_call` calls `VerbaLedger.write*` — a gate denial becomes an error `ToolMessage`, and that's it. If you want an audit trail of gate decisions, your own code (e.g. wrapping `VSLToolMiddleware` construction, or a separate middleware) has to call `ledger.write_monitor`/`ledger.write(LedgerEntryType.PRE_NODE, ...)`/`write_verification` explicitly, causally linked via `caused_by` — the same three entry types `vsl-core`'s own [building guide](https://github.com/supersemantics/VSL-Core/blob/main/docs/building-with-vsl-core.md#step-3-the-five-things-youll-actually-write) says to write around every gated call. Skip `PRE_NODE` and `VerbaLedger.audit()`'s `drift_flagged_monitor_has_pre_node` check fails on any denial — not a bug in `audit()`, just an incomplete write. An agent with no ledger calls anywhere produces real, working gating and zero audit trail — this package won't warn you, because from its point of view every gate did exactly what it was compiled to do.
 
-For persisting those writes to a durable, hosted ledger rather than a local file, `VerbaLedger` accepts any `LedgerStore` -- see [`vsl-core-ledger-client`](https://github.com/supersemantics/VSL-Core-ledger-client).
+Where those writes are kept is up to you: `VerbaLedger` accepts any `LedgerStore`, and vsl-core includes `InMemoryLedgerStore`, `JsonlLedgerStore` (a local append-only file) and an optional immudb store.
 
 ## The F1/F2 assurance distinction — same caveat as `vsl-core` and `vsl-langgraph`
 
