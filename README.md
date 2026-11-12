@@ -23,6 +23,14 @@ That is a genuine F1 pre-commitment guarantee: the middleware runs strictly befo
 
 This supersedes an earlier, weaker finding (see project memory) that LangChain's callback system (`on_tool_start`, etc.) had unconfirmed blocking behavior — `wrap_tool_call` is a different, confirmed mechanism, not the same uncertain one.
 
+## Install
+
+```bash
+pip install vsl-langchain
+```
+
+This installs vsl-core (`super-semantics-vsl`, imported as `vsl_core`) and LangChain with it.
+
 ## Quick taste
 
 ```python
