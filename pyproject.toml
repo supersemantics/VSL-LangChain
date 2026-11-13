@@ -4,19 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vsl-langchain"
-version = "0.1.1"
+version = "0.1.2"
 description = "LangChain adapter for VSL (VERBA Specification Language) governance primitives -- implements vsl-core's VSLAdapter conformance contract via create_agent's AgentMiddleware.wrap_tool_call hook."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
-    # vsl-core (dist name super-semantics-vsl) isn't on PyPI yet, so it is
-    # installed from GitHub, pinned to a release tag so an install can't
-    # change under you when vsl-core's main moves. An application that
-    # installs vsl-core itself must name exactly this URL (pip refuses two
-    # different URLs for one package). Switch to a version pin once vsl-core
-    # is on PyPI; PyPI rejects direct-URL dependencies at upload time.
-    "super-semantics-vsl @ git+https://github.com/supersemantics/VSL-Core.git@v0.3.0",
+    # vsl-core, published on PyPI as super-semantics-vsl (imported as vsl_core).
+    "super-semantics-vsl>=0.3,<0.4",
     # AgentMiddleware.wrap_tool_call ("skip calling it to short-circuit")
     # is the confirmed F1 pre-commitment interception point this adapter
     # compiles gates onto -- requires the current, non-deprecated
@@ -30,6 +25,12 @@ classifiers = [
     "Operating System :: OS Independent",
     "Development Status :: 3 - Alpha",
 ]
+
+[project.urls]
+Homepage = "https://github.com/supersemantics/VSL-LangChain"
+Repository = "https://github.com/supersemantics/VSL-LangChain"
+Changelog = "https://github.com/supersemantics/VSL-LangChain/blob/HEAD/CHANGELOG.md"
+Issues = "https://github.com/supersemantics/VSL-LangChain/issues"
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "pytest-asyncio>=0.23"]
