@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vsl-langchain"
-version = "0.1.2"
+version = "0.2.0"
 description = "LangChain adapter for VSL (VERBA Specification Language) governance primitives -- implements vsl-core's VSLAdapter conformance contract via create_agent's AgentMiddleware.wrap_tool_call hook."
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"
 dependencies = [
     # vsl-core, published on PyPI as super-semantics-vsl (imported as vsl_core).
-    "super-semantics-vsl>=0.3,<0.4",
+    "super-semantics-vsl>=0.4,<0.5",
     # AgentMiddleware.wrap_tool_call ("skip calling it to short-circuit")
     # is the confirmed F1 pre-commitment interception point this adapter
     # compiles gates onto -- requires the current, non-deprecated

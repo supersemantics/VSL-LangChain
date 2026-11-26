@@ -2,6 +2,19 @@
 
 What changed in each release, and why. Newest first.
 
+## 0.2.0 (unreleased): vsl-core 0.4, no F2 claims
+
+**Before:** vsl-langchain required vsl-core 0.3, and every gate in the README and tests passed an
+`AssuranceBasis` declaring F1/F2, which nothing checked. The README described this as self-declared.
+
+**After:** vsl-core is `super-semantics-vsl>=0.4,<0.5`. Gates are built from a name, description and
+monitor or rule; the README and tests pass no `assurance_basis`. The README's F1/F2 section is now
+"What a gate reports", and the ledger section shows `write_action()` and `enforcement()`, which
+compute from the ledger whether the gate held before the tool ran. Code that still passes
+`assurance_basis` keeps working, with a `FutureWarning` from vsl-core.
+
+**Why:** vsl-core 0.4.0 no longer takes a declared F2 level; enforcement is computed, not claimed.
+
 ## 0.1.2 (2026-11-13, tag `v0.1.2`): published on PyPI
 
 The first version on PyPI: `pip install vsl-langchain`, which installs vsl-core (`super-semantics-vsl`)

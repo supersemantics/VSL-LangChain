@@ -36,7 +36,7 @@ This installs vsl-core (`super-semantics-vsl`, imported as `vsl_core`) and LangC
 ```python
 from langchain.agents import create_agent
 from vsl_core.constructs import PreNode
-from vsl_core.metrics import AssuranceBasis, F2Modification, GammaEstimate
+from vsl_core.metrics import GammaEstimate
 from vsl_langchain import LangChainAdapter, VSLToolMiddleware
 
 adapter = LangChainAdapter()
@@ -49,7 +49,6 @@ pre_node = PreNode(
     name="refund-cap",
     description="Requires refund amount under the hard cap.",
     monitor=monitor,
-    assurance_basis=AssuranceBasis(f1_pre_commitment=True, f2_modification=F2Modification.NONE),
 )
 gate = adapter.compile_pre_node(pre_node)
 
@@ -70,11 +69,13 @@ A `PreNode`'s `Fallback` (`on_failure`, `delta_factor`, `max_retries`, `on_max_r
 
 Nothing in `awrap_tool_call` calls `VerbaLedger.write*` — a gate denial becomes an error `ToolMessage`, and that's it. If you want an audit trail of gate decisions, your own code (e.g. wrapping `VSLToolMiddleware` construction, or a separate middleware) has to call `ledger.write_monitor`/`ledger.write(LedgerEntryType.PRE_NODE, ...)`/`write_verification` explicitly, causally linked via `caused_by` — the same three entry types `vsl-core`'s own [building guide](https://github.com/supersemantics/VSL-Core/blob/main/docs/building-with-vsl-core.md#step-3-the-five-things-youll-actually-write) says to write around every gated call. Skip `PRE_NODE` and `VerbaLedger.audit()`'s `drift_flagged_monitor_has_pre_node` check fails on any denial — not a bug in `audit()`, just an incomplete write. An agent with no ledger calls anywhere produces real, working gating and zero audit trail — this package won't warn you, because from its point of view every gate did exactly what it was compiled to do.
 
+To record the tool call itself, call `ledger.write_action(identity_key=..., action_name=..., decision_id=...)` inside the tool, with the same `decision_id` as the gate's `write_gate_decision`. `ledger.enforcement(decision_id)` then reads `BEFORE_ACTION` when every gate decision came before the tool ran (or a denial stopped it), and `AFTER_ACTION` when the tool ran first.
+
 Where those writes are kept is up to you: `VerbaLedger` accepts any `LedgerStore`, and vsl-core includes `InMemoryLedgerStore`, `JsonlLedgerStore` (a local append-only file) and an optional immudb store.
 
-## The F1/F2 assurance distinction — same caveat as `vsl-core` and `vsl-langgraph`
+## What a gate reports
 
-Every `PreNode`/`Invariant` here still requires an `AssuranceBasis`, and it's still **self-declared, not independently verified** — nothing in this package checks that a stated `F2Modification.FULL` actually matches what a `monitor`/`rule` does. See `vsl-core`'s README ("The F1/F2 assurance distinction") for the full explanation. `vsl-langchain` does not yet carry the hosted-API-detection heuristic `vsl-langgraph`'s `LangGraphAdapter` has — that's a known gap, not implemented in this initial version.
+Gates take no assurance claim: build a `PreNode` or `Invariant` from its name, description and monitor or rule. Whether a gate ran before its tool is computed from the ledger, not declared (see [vsl-core's "What a gate reports"](https://github.com/supersemantics/VSL-Core#what-a-gate-reports)). Code written for vsl-langchain 0.1 that still passes `assurance_basis` gets a `FutureWarning` from vsl-core; delete the argument.
 
 ## Status
 

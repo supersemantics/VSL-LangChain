@@ -8,11 +8,9 @@ from typing import Any
 from langgraph.prebuilt.tool_node import ToolCallRequest
 from vsl_core.constructs import Invariant, PreNode
 from vsl_core.exceptions import InvariantViolation
-from vsl_core.metrics import AssuranceBasis, F2Modification, GammaEstimate
+from vsl_core.metrics import GammaEstimate
 
 from vsl_langchain import LangChainAdapter, VSLToolMiddleware
-
-_ASSURANCE_BASIS = AssuranceBasis(f1_pre_commitment=True, f2_modification=F2Modification.NONE)
 
 _HARD_CAP = 1000.0
 
@@ -50,7 +48,6 @@ def _build_pre_node_middleware() -> VSLToolMiddleware:
         name="refund-amount-pre-node",
         description="Requires refund amount under the hard cap before send_refund runs.",
         monitor=_under_hard_cap,
-        assurance_basis=_ASSURANCE_BASIS,
     )
     gate = adapter.compile_pre_node(pre_node)
     return VSLToolMiddleware(gates_by_tool_name={"send_refund": gate})
@@ -62,7 +59,6 @@ def _build_invariant_middleware() -> VSLToolMiddleware:
         name="refund-amount-invariant",
         description="Refund amount must never exceed the hard cap -- non-bypassable.",
         rule=_refund_amount_ok,
-        assurance_basis=_ASSURANCE_BASIS,
     )
     gate = adapter.compile_invariant(invariant)
     return VSLToolMiddleware(gates_by_tool_name={"send_refund": gate})
@@ -117,3 +113,42 @@ async def test_ungated_tool_passes_straight_through():
 
     assert calls == ["lookup_order"]
     assert result == "executed lookup_order"
+
+
+import pytest  # noqa: E402
+
+from vsl_core.ledger import Enforcement, VerbaLedger  # noqa: E402
+
+
+@pytest.mark.parametrize("amount", [250.0, 5000.0])
+async def test_ledger_shows_the_gate_held_before_the_tool(amount):
+    ledger = VerbaLedger()
+
+    async def rule(candidate_input: Any) -> bool:
+        allowed = candidate_input["args"]["amount"] <= _HARD_CAP
+        ledger.write_gate_decision(identity_key="refund-agent", primitive_name="refund-cap",
+                                   allowed=allowed, decision_id="d1")
+        return allowed
+
+    calls: list[str] = []
+
+    async def handler(request: ToolCallRequest):
+        ledger.write_action(identity_key="refund-agent", action_name="send_refund", decision_id="d1")
+        calls.append(request.tool_call["name"])
+        return "executed send_refund"
+
+    gate = LangChainAdapter().compile_invariant(Invariant(name="refund-cap", description="d", rule=rule))
+    middleware = VSLToolMiddleware(gates_by_tool_name={"send_refund": gate})
+    await middleware.awrap_tool_call(_make_request("send_refund", {"amount": amount}), handler)
+
+    assert (calls == ["send_refund"]) is (amount <= _HARD_CAP)
+    assert ledger.enforcement("d1") == Enforcement.BEFORE_ACTION
+
+
+def test_compiling_gates_without_a_basis_warns_about_nothing():
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        LangChainAdapter().compile_invariant(Invariant(name="i", description="d", rule=_refund_amount_ok))
+        LangChainAdapter().compile_pre_node(PreNode(name="p", description="d", monitor=_under_hard_cap))
