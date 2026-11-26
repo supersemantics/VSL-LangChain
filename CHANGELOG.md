@@ -2,7 +2,7 @@
 
 What changed in each release, and why. Newest first.
 
-## 0.2.0 (unreleased): vsl-core 0.4, no F2 claims
+## 0.2.0 (2026-11-26, tag `v0.2.0`): vsl-core 0.4, no F2 claims
 
 **Before:** vsl-langchain required vsl-core 0.3, and every gate in the README and tests passed an
 `AssuranceBasis` declaring F1/F2, which nothing checked. The README described this as self-declared.
