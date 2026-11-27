@@ -2,6 +2,20 @@
 
 What changed in each release, and why. Newest first.
 
+## 0.3.0 (unreleased): sync agent runs, and next to AGT's middleware
+
+**Before:** `VSLToolMiddleware` implemented only `awrap_tool_call`. An agent run with `invoke`
+(not `ainvoke`) failed with LangChain's `NotImplementedError` as soon as it reached the middleware,
+so it could not share an agent with a sync-only middleware such as Microsoft AGT's LangChain
+`GovernanceMiddleware`, which in turn fails under `ainvoke`.
+
+**After:** `VSLToolMiddleware` also implements `wrap_tool_call`. The same compiled gates run on one
+private event loop thread, so a sync run works whether or not its thread has a running loop, and a
+denial returns the same error `ToolMessage`. The README shows the middleware next to AGT's, and its
+Status covers a full `create_agent` loop with a scripted model.
+
+**Why:** agents run with `invoke` are common, and AGT's LangChain integration supports only that.
+
 ## 0.2.0 (2026-11-26, tag `v0.2.0`): vsl-core 0.4, no F2 claims
 
 **Before:** vsl-langchain required vsl-core 0.3, and every gate in the README and tests passed an

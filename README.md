@@ -21,7 +21,7 @@ A [LangChain](https://github.com/langchain-ai/langchain) adapter for
 
 That is a genuine F1 pre-commitment guarantee: the middleware runs strictly before the tool executes, and structurally controls whether the real call (`handler`) ever happens at all. If a gate denies, `handler` is never called — the tool genuinely never runs, proven directly in this repo's own tests (`test_integration.py` asserts the handler's call log stays empty on denial, not just that a particular return value came back).
 
-This supersedes an earlier, weaker finding (see project memory) that LangChain's callback system (`on_tool_start`, etc.) had unconfirmed blocking behavior — `wrap_tool_call` is a different, confirmed mechanism, not the same uncertain one.
+This supersedes an earlier, weaker finding that LangChain's callback system (`on_tool_start`, etc.) had unconfirmed blocking behavior — `wrap_tool_call` is a different, confirmed mechanism, not the same uncertain one.
 
 ## Install
 
@@ -61,13 +61,43 @@ agent = create_agent(
 )
 ```
 
+## Sync and async agent runs
+
+`VSLToolMiddleware` implements both of LangChain's tool-call hooks, so it works however the agent is
+run: `awrap_tool_call` for `ainvoke`/`astream`, `wrap_tool_call` for `invoke`/`stream`. The gates are
+the same async callables either way. In a sync run they execute on one private event loop thread,
+started on first use, so the sync hook also works on a thread that already has a running loop (a
+sync run started from a notebook or an async web handler).
+
+## Next to AGT's LangChain middleware
+
+Microsoft's Agent Governance Toolkit governs LangChain with its own `create_agent` middleware,
+`LangChainKernel(...).as_middleware()`. Both go in the same list, and both must allow before the tool
+runs:
+
+```python
+agent = create_agent(
+    model=model,
+    tools=[send_refund, lookup_order],
+    middleware=[kernel.as_middleware(), VSLToolMiddleware(gates_by_tool_name={"send_refund": gate})],
+)
+agent.invoke({"messages": [...]})
+```
+
+AGT's middleware (in `agent-governance-toolkit` 4.1 and `-core` 5.0) implements only the sync hooks,
+so run the agent with `invoke`; with `ainvoke`, LangChain refuses AGT's middleware before any tool
+runs. AGT's middleware also needs AGT's `agt-policies` runtime installed. This repo's tests run
+`VSLToolMiddleware` in a sync `create_agent` loop next to a sync-only middleware that stands in for
+AGT's, in both orders. For AGT's own interceptor chain and Agent Hooks, see
+[vsl-agt](https://github.com/supersemantics/VSL-agent-governance-toolkit).
+
 ## `VSLToolMiddleware` doesn't consume `Fallback`
 
-A `PreNode`'s `Fallback` (`on_failure`, `delta_factor`, `max_retries`, `on_max_retries`) is policy data only here — `LangChainAdapter.compile_pre_node`/`compile_invariant` never read `pre_node.fallback`. On denial, `VSLToolMiddleware.awrap_tool_call` returns an error `ToolMessage` once, immediately; there is no retry loop. This is the same inertness `vsl-langgraph`'s `LangGraphAdapter` has — `vsl-core`'s own `PlainPythonReferenceAdapter` doesn't consume `Fallback` either, so no adapter currently executes these fields as behavior.
+A `PreNode`'s `Fallback` (`on_failure`, `delta_factor`, `max_retries`, `on_max_retries`) is policy data only here — `LangChainAdapter.compile_pre_node`/`compile_invariant` never read `pre_node.fallback`. On denial, `VSLToolMiddleware` returns an error `ToolMessage` once, immediately; there is no retry loop. This is the same inertness `vsl-langgraph`'s `LangGraphAdapter` has — `vsl-core`'s own `PlainPythonReferenceAdapter` doesn't consume `Fallback` either, so no adapter currently executes these fields as behavior.
 
 ## `VSLToolMiddleware` doesn't write to the ledger either
 
-Nothing in `awrap_tool_call` calls `VerbaLedger.write*` — a gate denial becomes an error `ToolMessage`, and that's it. If you want an audit trail of gate decisions, your own code (e.g. wrapping `VSLToolMiddleware` construction, or a separate middleware) has to call `ledger.write_monitor`/`ledger.write(LedgerEntryType.PRE_NODE, ...)`/`write_verification` explicitly, causally linked via `caused_by` — the same three entry types `vsl-core`'s own [building guide](https://github.com/supersemantics/VSL-Core/blob/main/docs/building-with-vsl-core.md#step-3-the-five-things-youll-actually-write) says to write around every gated call. Skip `PRE_NODE` and `VerbaLedger.audit()`'s `drift_flagged_monitor_has_pre_node` check fails on any denial — not a bug in `audit()`, just an incomplete write. An agent with no ledger calls anywhere produces real, working gating and zero audit trail — this package won't warn you, because from its point of view every gate did exactly what it was compiled to do.
+Nothing in `VSLToolMiddleware` calls `VerbaLedger.write*` — a gate denial becomes an error `ToolMessage`, and that's it. If you want an audit trail of gate decisions, your own code (e.g. wrapping `VSLToolMiddleware` construction, or a separate middleware) has to call `ledger.write_monitor`/`ledger.write(LedgerEntryType.PRE_NODE, ...)`/`write_verification` explicitly, causally linked via `caused_by` — the same three entry types `vsl-core`'s own [building guide](https://github.com/supersemantics/VSL-Core/blob/main/docs/building-with-vsl-core.md#step-3-the-five-things-youll-actually-write) says to write around every gated call. Skip `PRE_NODE` and `VerbaLedger.audit()`'s `drift_flagged_monitor_has_pre_node` check fails on any denial — not a bug in `audit()`, just an incomplete write. An agent with no ledger calls anywhere produces real, working gating and zero audit trail — this package won't warn you, because from its point of view every gate did exactly what it was compiled to do.
 
 To record the tool call itself, call `ledger.write_action(identity_key=..., action_name=..., decision_id=...)` inside the tool, with the same `decision_id` as the gate's `write_gate_decision`. `ledger.enforcement(decision_id)` then reads `BEFORE_ACTION` when every gate decision came before the tool ran (or a denial stopped it), and `AFTER_ACTION` when the tool ran first.
 
@@ -79,7 +109,7 @@ Gates take no assurance claim: build a `PreNode` or `Invariant` from its name, d
 
 ## Status
 
-Alpha. Conformance-suite green. Integration-tested against the real `ToolCallRequest`/`ToolMessage` types from the actually-installed `langchain`/`langgraph` packages (not mocks) — covering: `PreNode` allow/deny, `Invariant` allow/deny, and an ungated tool passing straight through. Not yet tested against a full live `create_agent()` loop with a real or fake chat model — only the middleware's `awrap_tool_call` hook in isolation.
+Alpha. Conformance-suite green. Integration-tested against the real `ToolCallRequest`/`ToolMessage` types from the actually-installed `langchain`/`langgraph` packages (not mocks) — covering: `PreNode` allow/deny, `Invariant` allow/deny, and an ungated tool passing straight through. Also tested through a full `create_agent()` loop with a scripted chat model (no network), run both with `invoke` and `ainvoke`, and next to a sync-only middleware in both orders. Not yet tested with a live model service.
 
 ## Layout
 
@@ -88,5 +118,6 @@ src/vsl_langchain/
 └── adapter.py   LangChainAdapter (VSLAdapter conformance contract), VSLToolMiddleware (create_agent wiring)
 tests/
 ├── test_conformance.py   run_conformance_suite(LangChainAdapter()) == []
-└── test_integration.py   real ToolCallRequest/ToolMessage, PreNode + Invariant, allow/deny/ungated paths
+├── test_integration.py   real ToolCallRequest/ToolMessage, PreNode + Invariant, allow/deny/ungated paths
+└── test_sync.py          create_agent with invoke and ainvoke; next to a sync-only middleware
 ```

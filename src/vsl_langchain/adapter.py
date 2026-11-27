@@ -21,6 +21,13 @@ top is VSLToolMiddleware: the tool-name-keyed wiring for create_agent's
 middleware list, and the ToolMessage-shaped denial response create_agent
 actually expects back from wrap_tool_call.
 
+VSLToolMiddleware implements both hooks: awrap_tool_call for an agent run
+with ainvoke/astream, and wrap_tool_call for invoke/stream. The compiled
+gates are async either way; the sync hook runs them on one private event
+loop thread (started on first use), so it works whether or not the calling
+thread has a running loop. That also lets it sit in the same middleware list
+as a sync-only middleware, such as AGT's LangChain GovernanceMiddleware.
+
 Requires langchain>=1.0's create_agent API (AgentMiddleware.wrap_tool_call).
 Does not support the deprecated AgentExecutor/create_react_agent path --
 that API predates the middleware system this adapter depends on.
@@ -28,7 +35,9 @@ that API predates the middleware system this adapter depends on.
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, Mapping
+import asyncio
+import threading
+from typing import Any, Awaitable, Callable, Coroutine, Mapping
 
 from langchain.agents.middleware.types import AgentMiddleware
 from langchain_core.messages import ToolMessage
@@ -37,6 +46,25 @@ from vsl_core.conformance.protocol import CompiledGate
 from vsl_core.exceptions import AutomationDeniedException, InvariantViolation
 
 DEFAULT_DENIAL_KEY = "vsl_denial"
+
+
+class _GateLoop:
+    """One private asyncio loop on a daemon thread, for running compiled
+    gates from the sync hook."""
+
+    def __init__(self) -> None:
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._lock = threading.Lock()
+
+    def run(self, coro: Coroutine[Any, Any, Any]) -> Any:
+        with self._lock:
+            if self._loop is None:
+                self._loop = asyncio.new_event_loop()
+                threading.Thread(target=self._loop.run_forever, name="vsl-langchain-gates", daemon=True).start()
+        return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
+
+
+_GATE_LOOP = _GateLoop()
 
 
 class LangChainAdapter:
@@ -77,7 +105,8 @@ class LangChainAdapter:
 
 class VSLToolMiddleware(AgentMiddleware):
     """Gates specific tools inside a create_agent() agent, via
-    AgentMiddleware.awrap_tool_call.
+    AgentMiddleware.awrap_tool_call (async runs) and wrap_tool_call (sync
+    runs). Both run the same gates and return the same denial.
 
     `gates_by_tool_name` maps a tool's name (matched against
     request.tool_call["name"]) to a CompiledGate produced by
@@ -115,18 +144,37 @@ class VSLToolMiddleware(AgentMiddleware):
         request: Any,
         handler: Callable[[Any], Awaitable[ToolMessage | Any]],
     ) -> ToolMessage | Any:
-        tool_name = request.tool_call["name"]
-        gate = self._gates.get(tool_name)
+        gate = self._gates.get(request.tool_call["name"])
         if gate is None:
             return await handler(request)
 
         try:
             await gate(self._extract(request))
         except AutomationDeniedException as exc:
-            return ToolMessage(
-                content=f"Denied by VSL governance: {exc}",
-                tool_call_id=request.tool_call["id"],
-                status="error",
-            )
+            return self._denied(request, exc)
 
         return await handler(request)
+
+    def wrap_tool_call(
+        self,
+        request: Any,
+        handler: Callable[[Any], ToolMessage | Any],
+    ) -> ToolMessage | Any:
+        gate = self._gates.get(request.tool_call["name"])
+        if gate is None:
+            return handler(request)
+
+        try:
+            _GATE_LOOP.run(gate(self._extract(request)))
+        except AutomationDeniedException as exc:
+            return self._denied(request, exc)
+
+        return handler(request)
+
+    @staticmethod
+    def _denied(request: Any, exc: AutomationDeniedException) -> ToolMessage:
+        return ToolMessage(
+            content=f"Denied by VSL governance: {exc}",
+            tool_call_id=request.tool_call["id"],
+            status="error",
+        )
