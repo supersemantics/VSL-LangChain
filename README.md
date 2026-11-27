@@ -89,7 +89,7 @@ so run the agent with `invoke`; with `ainvoke`, LangChain refuses AGT's middlewa
 runs. AGT's middleware also needs AGT's `agt-policies` runtime installed. This repo's tests run
 `VSLToolMiddleware` in a sync `create_agent` loop next to a sync-only middleware that stands in for
 AGT's, in both orders. For AGT's own interceptor chain and Agent Hooks, see
-[vsl-agt](https://github.com/supersemantics/agent-governance-toolkit).
+[vsl-agt](https://github.com/supersemantics/VSL-agent-governance-toolkit).
 
 ## `VSLToolMiddleware` doesn't consume `Fallback`
 
