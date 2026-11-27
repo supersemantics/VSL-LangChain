@@ -2,7 +2,7 @@
 
 What changed in each release, and why. Newest first.
 
-## 0.3.0 (unreleased): sync agent runs, and next to AGT's middleware
+## 0.3.0 (2026-11-27, tag `v0.3.0`): sync agent runs, and next to AGT's middleware
 
 **Before:** `VSLToolMiddleware` implemented only `awrap_tool_call`. An agent run with `invoke`
 (not `ainvoke`) failed with LangChain's `NotImplementedError` as soon as it reached the middleware,
