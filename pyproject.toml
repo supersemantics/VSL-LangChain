@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vsl-langchain"
-version = "0.2.0"
+version = "0.3.0"
 description = "LangChain adapter for VSL (VERBA Specification Language) governance primitives -- implements vsl-core's VSLAdapter conformance contract via create_agent's AgentMiddleware.wrap_tool_call hook."
 readme = "README.md"
 license = { text = "MIT" }
